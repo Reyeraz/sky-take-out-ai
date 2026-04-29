@@ -12,20 +12,21 @@ spring:
       url: jdbc:mysql://${sky.datasource.host}:${sky.datasource.port}/${sky.datasource.database}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
       username: ${sky.datasource.username}
       password: ${sky.datasource.password}
-  redis:
-    client-type: jedis
-    host: ${sky.redis.host}
-    port: ${sky.redis.port}
-    password: ${sky.redis.password}
-    database: ${sky.redis.database}
-    timeout: 30s
-    connect-timeout: 30s
-    jedis:
-      pool:
-        enabled: true
-        max-active: 8
-        max-idle: 8
-        min-idle: 2
+  data:
+    redis:
+      client-type: jedis
+      host: ${sky.redis.host}
+      port: ${sky.redis.port}
+      password: ${sky.redis.password}
+      database: ${sky.redis.database}
+      timeout: 30s
+      connect-timeout: 30s
+      jedis:
+        pool:
+          enabled: true
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
   ai:
     dashscope:
       api-key: ${BAILIAN_API_KEY:}
