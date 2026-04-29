@@ -17,11 +17,11 @@ public class AiConfig {
     }
 
     @Bean
-    public ReactAgent chatAgent(ChatClient chatClient, ToolCallback[] dishTools) {
+    public ReactAgent chatAgent(ChatClient chatClient, ToolCallback[] dishToolCallbacks) {
         return ReactAgent.builder()
                 .name("sky_take_out_agent")
                 .chatClient(chatClient)
-                .tools(dishTools)
+                .tools(dishToolCallbacks)
                 .systemPrompt("""
                         你是小苍，一个专业的外卖点餐助手。你可以帮用户推荐菜品、回答菜品相关问题。
                         你可以使用提供的工具来查询菜品信息、热销排行、分类列表。
@@ -33,7 +33,7 @@ public class AiConfig {
     }
 
     @Bean
-    public ToolCallback[] dishTools(com.sky.ai.tool.DishTools dishTools) {
+    public ToolCallback[] dishToolCallbacks(com.sky.ai.tool.DishTools dishTools) {
         return MethodToolCallbackProvider.builder()
                 .toolObjects(dishTools)
                 .build()

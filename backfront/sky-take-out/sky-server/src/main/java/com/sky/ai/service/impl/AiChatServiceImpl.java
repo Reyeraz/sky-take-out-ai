@@ -1,5 +1,6 @@
 package com.sky.ai.service.impl;
 
+import com.alibaba.cloud.ai.graph.NodeOutput;
 import com.sky.ai.service.AiService;
 import com.sky.dto.AiChatDTO;
 import com.sky.vo.*;
@@ -21,7 +22,7 @@ public class AiChatServiceImpl {
         return aiService.chat(userId, message, history);
     }
 
-    public Flux<String> chatStream(Long userId, String message, List<AiChatDTO.ChatMessage> history) {
+    public Flux<NodeOutput> chatStream(Long userId, String message, List<AiChatDTO.ChatMessage> history) {
         return aiService.chatStream(userId, message, history);
     }
 }

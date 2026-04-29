@@ -1,5 +1,7 @@
 package com.sky.controller.user;
 
+import com.alibaba.cloud.ai.graph.NodeOutput;
+import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
 import com.alibaba.fastjson2.JSON;
 import com.sky.ai.service.AiService;
 import com.sky.context.BaseContext;
@@ -11,6 +13,8 @@ import com.sky.vo.AiRecommendVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -61,22 +65,31 @@ public class AiController {
         log.info("AI流式对话, userId: {}, message: {}", userId, aiChatDTO.getMessage());
 
         SseEmitter emitter = new SseEmitter(300000L);
-        StringBuilder fullContent = new StringBuilder();
+        StringBuilder finalContent = new StringBuilder();
+        final boolean[] toolsCalled = {false};
 
         try {
-            Flux<String> stream = aiService.chatStream(userId, aiChatDTO.getMessage(), aiChatDTO.getHistory());
-            stream
-                    .doOnNext(chunk -> {
-                        try {
-                            fullContent.append(chunk);
-                            emitter.send(SseEmitter.event().data(chunk));
-                        } catch (Exception e) {
-                            log.warn("SSE发送数据失败: {}", e.getMessage());
+            Flux<NodeOutput> stream = aiService.chatStream(userId, aiChatDTO.getMessage(), aiChatDTO.getHistory());
+            stream.doOnNext(output -> {
+                        if (output instanceof StreamingOutput<?> so) {
+                            String text = extractText(so);
+                            if (text != null) {
+                                finalContent.append(text);
+                                try {
+                                    emitter.send(SseEmitter.event().data(text));
+                                } catch (Exception e) {
+                                    log.warn("SSE发送数据失败: {}", e.getMessage());
+                                }
+                            }
+                        } else if (!output.isEND() && !output.isSTART()) {
+                            // 工具开始执行时清空推理文字，后续只保留工具执行后的回答
+                            toolsCalled[0] = true;
+                            finalContent.setLength(0);
                         }
                     })
                     .doOnComplete(() -> {
                         try {
-                            AiChatVO parsed = aiService.parseChatResponse(fullContent.toString());
+                            AiChatVO parsed = aiService.parseChatResponse(finalContent.toString());
                             emitter.send(SseEmitter.event()
                                     .name("meta")
                                     .data(JSON.toJSONString(parsed)));
@@ -111,5 +124,19 @@ public class AiController {
         }
 
         return emitter;
+    }
+
+    private String extractText(StreamingOutput<?> so) {
+        Object origin = so.getOriginData();
+        if (origin instanceof AssistantMessage am && am.getText() != null) {
+            return am.getText();
+        }
+        if (origin instanceof ChatResponse cr) {
+            AssistantMessage am = cr.getResult().getOutput();
+            if (am != null && am.getText() != null) {
+                return am.getText();
+            }
+        }
+        return null;
     }
 }

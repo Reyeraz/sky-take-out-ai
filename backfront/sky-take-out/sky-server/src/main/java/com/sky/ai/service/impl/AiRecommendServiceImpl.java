@@ -154,24 +154,15 @@ public class AiRecommendServiceImpl implements AiService {
     }
 
     @Override
-    public Flux<String> chatStream(Long userId, String message, List<AiChatDTO.ChatMessage> history) {
+    public Flux<com.alibaba.cloud.ai.graph.NodeOutput> chatStream(Long userId, String message, List<AiChatDTO.ChatMessage> history) {
         try {
             RunnableConfig config = RunnableConfig.builder()
                     .threadId("user_" + userId)
                     .build();
-            return agent.stream(message, config)
-                    .flatMap(output -> {
-                        if (output instanceof com.alibaba.cloud.ai.graph.streaming.StreamingOutput<?> so) {
-                            Object origin = so.getOriginData();
-                            if (origin instanceof AssistantMessage am) {
-                                return Flux.just(am.getText());
-                            }
-                        }
-                        return Flux.empty();
-                    });
+            return agent.stream(message, config);
         } catch (Exception e) {
             log.warn("AI流式对话调用失败: {}", e.getMessage());
-            return Flux.just("抱歉，AI助手暂时不可用，请稍后再试。");
+            return Flux.error(e);
         }
     }
 

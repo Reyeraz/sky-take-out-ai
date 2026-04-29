@@ -1,5 +1,6 @@
 package com.sky.ai.service;
 
+import com.alibaba.cloud.ai.graph.NodeOutput;
 import com.sky.dto.AiChatDTO;
 import com.sky.vo.*;
 import reactor.core.publisher.Flux;
@@ -14,7 +15,7 @@ public interface AiService {
 
     AiChatVO chat(Long userId, String message, List<AiChatDTO.ChatMessage> history);
 
-    Flux<String> chatStream(Long userId, String message, List<AiChatDTO.ChatMessage> history);
+    Flux<NodeOutput> chatStream(Long userId, String message, List<AiChatDTO.ChatMessage> history);
 
     AiChatVO parseChatResponse(String response);
 
