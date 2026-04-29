@@ -1,43 +1,151 @@
-import { useState } from 'react';
-import { Send, Bot, User as UserIcon, Sparkles } from 'lucide-react';
+import { useState, useRef, useCallback } from 'react';
+import { Send, Bot, User as UserIcon, Sparkles, Square } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import api from '../api/client';
-import type { ChatMessage, AiChatVO } from '../types';
+import type { ChatMessage } from '../types';
+
+interface SSEMeta {
+  reply: string;
+  suggestedDishIds: number[];
+  suggestedDishNames: string[];
+}
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
+const WELCOME_MSG: ChatMessage = {
+  role: 'assistant',
+  content: '您好！我是您的 AI 美食助手。想吃点什么？我可以为您推荐今日最火爆的单品或者帮您搭配一份完美的餐食。',
+};
 
 export default function UserAiChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: '您好！我是您的 AI 美食助手。想吃点什么？我可以为您推荐今日最火爆的单品或者帮您搭配一份完美的餐食。' }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MSG]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
+  const getToken = () => localStorage.getItem('sky_token') || '';
+
+  const handleSend = useCallback(async () => {
+    if (!input.trim() || streaming) return;
 
     const userMsg = input.trim();
-    const history = messages.map(m => ({ role: m.role, content: m.content }));
+    const currentMessages = messagesRef.current;
+    const history = currentMessages.map(m => ({ role: m.role, content: m.content }));
+    const assistantIdx = currentMessages.length + 1;
+
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setInput('');
-    setLoading(true);
+    setStreaming(true);
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const data = await api.post('/user/ai/chat', {
-        message: userMsg,
-        history,
-      }) as unknown as AiChatVO;
+      const response = await fetch(`${BASE_URL}/user/ai/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          token: getToken(),
+        },
+        body: JSON.stringify({ message: userMsg, history }),
+        signal: controller.signal,
+      });
 
-      let replyText = data.reply || '已收到您的消息';
-      if (data.suggestedDishNames?.length > 0) {
-        replyText += '\n\n**推荐菜品：** ' + data.suggestedDishNames.join('、');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
 
-      setMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: '抱歉，AI助手暂时不可用，请稍后再试。' }]);
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Split complete SSE events (separated by \n\n)
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          const lines = part.split('\n');
+          let eventType = '';
+          let data = '';
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              data += line.slice(6);
+            }
+          }
+
+          if (!data) continue;
+
+          if (eventType === 'meta') {
+            const meta: SSEMeta = JSON.parse(data);
+            setMessages(prev => {
+              const updated = [...prev];
+              if (updated[assistantIdx]) {
+                let replyText = meta.reply || updated[assistantIdx].content;
+                if (meta.suggestedDishNames?.length) {
+                  replyText += '\n\n**推荐菜品：** ' + meta.suggestedDishNames.join('、');
+                }
+                updated[assistantIdx] = { ...updated[assistantIdx], content: replyText };
+              }
+              return updated;
+            });
+          } else if (eventType === 'error') {
+            setMessages(prev => {
+              const updated = [...prev];
+              if (updated[assistantIdx]) {
+                updated[assistantIdx] = { ...updated[assistantIdx], content: data || '抱歉，AI助手暂时不可用，请稍后再试。' };
+              }
+              return updated;
+            });
+          } else {
+            // Content chunk
+            setMessages(prev => {
+              const updated = [...prev];
+              if (updated[assistantIdx]) {
+                updated[assistantIdx] = {
+                  ...updated[assistantIdx],
+                  content: updated[assistantIdx].content + data,
+                };
+              }
+              return updated;
+            });
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('[SSE] Stream error:', err.message);
+        setMessages(prev => {
+          const updated = [...prev];
+          const idx = assistantIdx < updated.length ? assistantIdx : updated.length - 1;
+          if (updated[idx] && !updated[idx].content) {
+            updated[idx] = { ...updated[idx], content: '抱歉，AI助手暂时不可用，请稍后再试。' };
+          }
+          return updated;
+        });
+      }
     } finally {
-      setLoading(false);
+      setStreaming(false);
+      abortRef.current = null;
     }
+  }, [input, streaming]);
+
+  const handleStop = () => {
+    abortRef.current?.abort();
+    setStreaming(false);
   };
 
   return (
@@ -62,41 +170,39 @@ export default function UserAiChat() {
               animate={{ opacity: 1, y: 0 }}
               key={idx}
               className={cn(
-                "flex gap-3 max-w-[85%]",
-                msg.role === 'user' ? "ml-auto flex-row-reverse" : ""
+                'flex gap-3 max-w-[85%]',
+                msg.role === 'user' ? 'ml-auto flex-row-reverse' : '',
               )}
             >
-              <div className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm",
-                msg.role === 'user' ? "bg-primary text-white" : "bg-white text-gray-500"
-              )}>
+              <div
+                className={cn(
+                  'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm',
+                  msg.role === 'user'
+                    ? 'bg-primary text-white'
+                    : 'bg-white text-gray-500',
+                )}
+              >
                 {msg.role === 'user' ? <UserIcon size={14} /> : <Bot size={14} />}
               </div>
-              <div className={cn(
-                "p-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap",
-                msg.role === 'user'
-                  ? "bg-primary text-dark rounded-tr-none"
-                  : "bg-white text-gray-700 shadow-sm border border-gray-100 rounded-tl-none"
-              )}>
-                {msg.content}
+              <div
+                className={cn(
+                  'p-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap',
+                  msg.role === 'user'
+                    ? 'bg-primary text-dark rounded-tr-none'
+                    : 'bg-white text-gray-700 shadow-sm border border-gray-100 rounded-tl-none',
+                )}
+              >
+                {msg.content || (
+                  <span className="flex gap-1">
+                    <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" />
+                    <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce [animation-delay:0.2s]" />
+                    <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce [animation-delay:0.4s]" />
+                  </span>
+                )}
               </div>
             </motion.div>
           ))}
         </AnimatePresence>
-        {loading && (
-          <div className="flex gap-3 max-w-[85%]">
-            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center flex-shrink-0 shadow-sm border border-gray-100">
-              <Bot size={14} className="animate-pulse text-primary" />
-            </div>
-            <div className="bg-white p-3 rounded-2xl rounded-tl-none border border-gray-100 shadow-sm">
-              <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce"></span>
-                <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce [animation-delay:0.4s]"></span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Input */}
@@ -105,25 +211,36 @@ export default function UserAiChat() {
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSend()}
             placeholder="输入您想吃的口味或需求..."
-            className="w-full bg-gray-100 border-none rounded-full py-3 pl-5 pr-12 text-sm focus:ring-2 focus:ring-primary/50 transition-all font-medium"
+            disabled={streaming}
+            className="w-full bg-gray-100 border-none rounded-full py-3 pl-5 pr-12 text-sm focus:ring-2 focus:ring-primary/50 transition-all font-medium disabled:opacity-60"
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || loading}
-            className="absolute right-2 top-1.5 bottom-1.5 w-10 h-10 bg-primary text-dark rounded-full flex items-center justify-center transition-opacity disabled:opacity-50"
-          >
-            <Send size={16} />
-          </button>
+          {streaming ? (
+            <button
+              onClick={handleStop}
+              className="absolute right-2 top-1.5 bottom-1.5 w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center"
+            >
+              <Square size={14} />
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className="absolute right-2 top-1.5 bottom-1.5 w-10 h-10 bg-primary text-dark rounded-full flex items-center justify-center transition-opacity disabled:opacity-50"
+            >
+              <Send size={16} />
+            </button>
+          )}
         </div>
         <div className="flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-hide">
-          {['帮我推荐双人餐', '有什么清淡的菜？', '今日爆款是什么', '推荐一些辣菜'].map((tag) => (
+          {['帮我推荐双人餐', '有什么清淡的菜？', '今日爆款是什么', '推荐一些辣菜'].map(tag => (
             <button
               key={tag}
               onClick={() => setInput(tag)}
-              className="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-[10px] whitespace-nowrap hover:bg-primary/10 hover:text-primary transition-colors"
+              disabled={streaming}
+              className="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-[10px] whitespace-nowrap hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-50"
             >
               {tag}
             </button>

@@ -6,6 +6,7 @@ import com.sky.vo.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -18,5 +19,9 @@ public class AiChatServiceImpl {
 
     public AiChatVO chat(Long userId, String message, List<AiChatDTO.ChatMessage> history) {
         return aiService.chat(userId, message, history);
+    }
+
+    public Flux<String> chatStream(Long userId, String message, List<AiChatDTO.ChatMessage> history) {
+        return aiService.chatStream(userId, message, history);
     }
 }

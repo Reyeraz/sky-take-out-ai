@@ -10,10 +10,14 @@ import com.sky.mapper.*;
 import com.sky.result.Result;
 import com.sky.vo.*;
 import lombok.extern.slf4j.Slf4j;
+import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.alibaba.cloud.ai.graph.RunnableConfig;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -30,6 +34,9 @@ public class AiRecommendServiceImpl implements AiService {
 
     @Autowired
     private ChatClient chatClient;
+
+    @Autowired
+    private ReactAgent agent;
 
     @Autowired
     private OrderMapper orderMapper;
@@ -132,25 +139,39 @@ public class AiRecommendServiceImpl implements AiService {
 
     @Override
     public AiChatVO chat(Long userId, String message, List<AiChatDTO.ChatMessage> history) {
-        String dishesJson = getAvailableDishesJson();
-
         try {
-            String escapedDishesJson = dishesJson.replace("{", "\\{").replace("}", "\\}");
-            String response = chatClient.prompt()
-                    .system("你是一个友好的外卖点餐助手，名叫小苍。你可以帮用户推荐菜品、回答菜品相关问题。" +
-                            "当前可售菜品：\n" + escapedDishesJson +
-                            "\n如果用户问到菜品相关的问题，请根据上述菜品列表回答。" +
-                            "回复时如果推荐了具体菜品，请在最后单独一行用JSON列出推荐菜品ID，格式：[id1,id2,...]")
-                    .user(u -> u.text(message))
-                    .call()
-                    .content();
-
-            return parseChatResponse(response);
+            RunnableConfig config = RunnableConfig.builder()
+                    .threadId("user_" + userId)
+                    .build();
+            AssistantMessage response = agent.call(message, config);
+            return parseChatResponse(response.getText());
         } catch (Exception e) {
             log.warn("AI对话调用失败: {}", e.getMessage());
             return AiChatVO.builder()
                     .reply("抱歉，AI助手暂时不可用，请稍后再试。")
                     .build();
+        }
+    }
+
+    @Override
+    public Flux<String> chatStream(Long userId, String message, List<AiChatDTO.ChatMessage> history) {
+        try {
+            RunnableConfig config = RunnableConfig.builder()
+                    .threadId("user_" + userId)
+                    .build();
+            return agent.stream(message, config)
+                    .flatMap(output -> {
+                        if (output instanceof com.alibaba.cloud.ai.graph.streaming.StreamingOutput<?> so) {
+                            Object origin = so.getOriginData();
+                            if (origin instanceof AssistantMessage am) {
+                                return Flux.just(am.getText());
+                            }
+                        }
+                        return Flux.empty();
+                    });
+        } catch (Exception e) {
+            log.warn("AI流式对话调用失败: {}", e.getMessage());
+            return Flux.just("抱歉，AI助手暂时不可用，请稍后再试。");
         }
     }
 
@@ -446,7 +467,8 @@ public class AiRecommendServiceImpl implements AiService {
         return AiDailyVO.builder().date(date).slogan("今日精选推荐").recommendations(list).build();
     }
 
-    private AiChatVO parseChatResponse(String response) {
+    @Override
+    public AiChatVO parseChatResponse(String response) {
         List<Long> dishIds = new ArrayList<>();
         List<String> dishNames = new ArrayList<>();
         String reply = response;

@@ -33,8 +33,9 @@
         <jjwt.version>0.12.6</jjwt.version>
         <commons-lang3.version>3.17.0</commons-lang3.version>
         <poi.version>5.3.0</poi.version>
-        <spring-ai.version>1.0.0-M2</spring-ai.version>
-        <spring-ai-alibaba.version>1.0.0-M2</spring-ai-alibaba.version>
+        <spring-ai.version>1.1.2</spring-ai.version>
+        <spring-ai-alibaba.version>1.1.2.2</spring-ai-alibaba.version>
+        <spring-ai-alibaba-extensions.version>1.1.2.1</spring-ai-alibaba-extensions.version>
     </properties>
 
     <dependencyManagement>
@@ -119,6 +120,20 @@
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
                 <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-bom</artifactId>
+                <version>${spring-ai-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-extensions-bom</artifactId>
+                <version>${spring-ai-alibaba-extensions.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
