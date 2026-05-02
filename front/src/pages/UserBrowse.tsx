@@ -3,6 +3,7 @@ import { Search, Flame, ShoppingCart, ChevronLeft } from 'lucide-react';
 import api from '../api/client';
 import type { Category, DishVO, Setmeal, DishItemVO } from '../types';
 import { cn, formatPrice } from '../lib/utils';
+import { useCartFly } from '../components/CartFlyEffect';
 
 export default function UserBrowse() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -11,7 +12,9 @@ export default function UserBrowse() {
   const [activeCat, setActiveCat] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'dish' | 'setmeal'>('dish');
+  const [searchText, setSearchText] = useState('');
   const [setmealDetail, setSetmealDetail] = useState<{ id: number; items: DishItemVO[]; name: string } | null>(null);
+  const { triggerFly, CartParticles } = useCartFly();
 
   useEffect(() => {
     fetchCategories();
@@ -73,21 +76,33 @@ export default function UserBrowse() {
     else fetchSetmeals(id);
   };
 
-  const handleAddCart = async (dish: DishVO) => {
+  const handleAddCart = async (dish: DishVO, e: React.MouseEvent) => {
+    const { clientX, clientY } = e;
     try {
       await api.post('/user/shoppingCart/add', { dishId: dish.id });
+      triggerFly(clientX, clientY);
     } catch {
       console.warn('Failed to add to cart');
     }
   };
 
-  const handleAddSetmealCart = async (setmeal: Setmeal) => {
+  const handleAddSetmealCart = async (setmeal: Setmeal, e: React.MouseEvent) => {
+    const { clientX, clientY } = e;
     try {
       await api.post('/user/shoppingCart/add', { setmealId: setmeal.id });
+      triggerFly(clientX, clientY);
     } catch {
       console.warn('Failed to add setmeal to cart');
     }
   };
+
+  const filteredDishes = searchText
+    ? dishes.filter(d => d.name.toLowerCase().includes(searchText.toLowerCase()) || (d.description || '').toLowerCase().includes(searchText.toLowerCase()))
+    : dishes;
+
+  const filteredSetmeals = searchText
+    ? setmeals.filter(s => s.name.toLowerCase().includes(searchText.toLowerCase()) || (s.description || '').toLowerCase().includes(searchText.toLowerCase()))
+    : setmeals;
 
   const viewSetmealDetail = async (setmeal: Setmeal) => {
     try {
@@ -100,11 +115,17 @@ export default function UserBrowse() {
 
   return (
     <div className="flex flex-col h-full bg-white">
+      <CartParticles />
       <header className="px-4 py-3 bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-black">点餐</h1>
           <div className="relative flex-1 max-w-xs ml-4">
-            <input placeholder="搜索菜品..." className="w-full bg-gray-100 rounded-full py-1.5 pl-9 pr-3 text-xs focus:ring-1 focus:ring-[#ffc200]/50 outline-none" />
+            <input
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              placeholder="搜索菜品..."
+              className="w-full bg-gray-100 rounded-full py-1.5 pl-9 pr-3 text-xs focus:ring-1 focus:ring-[#ffc200]/50 outline-none"
+            />
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           </div>
         </div>
@@ -140,14 +161,14 @@ export default function UserBrowse() {
               {[1, 2, 3, 4].map(i => <div key={i} className="h-20 bg-gray-200 rounded-xl"></div>)}
             </div>
           ) : tab === 'dish' ? (
-            dishes.length === 0 ? (
+            filteredDishes.length === 0 ? (
               <div className="py-20 text-center text-gray-400">
                 <Flame size={40} className="mx-auto mb-2 opacity-20" />
-                <p className="text-sm">暂无菜品</p>
+                <p className="text-sm">{searchText ? '未找到匹配菜品' : '暂无菜品'}</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {dishes.map(dish => (
+                {filteredDishes.map(dish => (
                   <div key={dish.id} className="bg-white rounded-xl border border-gray-100 p-3 flex gap-3 shadow-sm hover:shadow-md transition-shadow">
                     <div className="w-20 h-20 bg-gray-100 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden">
                       {dish.image ? (
@@ -164,8 +185,8 @@ export default function UserBrowse() {
                       <div className="flex items-center justify-between mt-1">
                         <span className="text-[#ffc200] font-black text-sm">{formatPrice(dish.price)}</span>
                         <button
-                          onClick={() => handleAddCart(dish)}
-                          className="w-7 h-7 bg-[#ffc200] rounded-full flex items-center justify-center text-white shadow-sm hover:brightness-95"
+                          onClick={(e) => handleAddCart(dish, e)}
+                          className="w-7 h-7 bg-[#ffc200] rounded-full flex items-center justify-center text-white shadow-sm hover:brightness-95 active:scale-90 transition-transform"
                         >
                           <ShoppingCart size={14} />
                         </button>
@@ -176,14 +197,14 @@ export default function UserBrowse() {
               </div>
             )
           ) : (
-            setmeals.length === 0 ? (
+            filteredSetmeals.length === 0 ? (
               <div className="py-20 text-center text-gray-400">
                 <Flame size={40} className="mx-auto mb-2 opacity-20" />
-                <p className="text-sm">暂无套餐</p>
+                <p className="text-sm">{searchText ? '未找到匹配套餐' : '暂无套餐'}</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {setmeals.map(s => (
+                {filteredSetmeals.map(s => (
                   <div key={s.id} className="bg-white rounded-xl border border-gray-100 p-3 flex gap-3 shadow-sm hover:shadow-md transition-shadow" onClick={() => viewSetmealDetail(s)}>
                     <div className="w-20 h-20 bg-gray-100 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden">
                       {s.image ? (
@@ -200,8 +221,8 @@ export default function UserBrowse() {
                       <div className="flex items-center justify-between mt-1">
                         <span className="text-[#ffc200] font-black text-sm">{formatPrice(s.price)}</span>
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleAddSetmealCart(s); }}
-                          className="w-7 h-7 bg-[#ffc200] rounded-full flex items-center justify-center text-white shadow-sm hover:brightness-95"
+                          onClick={(e) => { e.stopPropagation(); handleAddSetmealCart(s, e); }}
+                          className="w-7 h-7 bg-[#ffc200] rounded-full flex items-center justify-center text-white shadow-sm hover:brightness-95 active:scale-90 transition-transform"
                         >
                           <ShoppingCart size={14} />
                         </button>

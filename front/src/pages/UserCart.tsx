@@ -4,6 +4,7 @@ import { ShoppingCart, Trash2, Plus, Minus, ArrowRight } from 'lucide-react';
 import api from '../api/client';
 import type { ShoppingCartItem } from '../types';
 import { formatPrice } from '../lib/utils';
+import { notifyCartChange } from '../layouts/UserLayout';
 
 export default function UserCart() {
   const navigate = useNavigate();
@@ -34,6 +35,7 @@ export default function UserCart() {
         dishFlavor: item.dishFlavor,
       });
       fetchCart();
+      notifyCartChange();
     } catch {
       console.warn('Failed to remove item');
     }
@@ -47,6 +49,7 @@ export default function UserCart() {
         dishFlavor: item.dishFlavor,
       });
       fetchCart();
+      notifyCartChange();
     } catch {
       console.warn('Failed to add item');
     }
@@ -56,6 +59,7 @@ export default function UserCart() {
     try {
       await api.delete('/user/shoppingCart/clean');
       setItems([]);
+      notifyCartChange();
     } catch {
       console.warn('Failed to clear cart');
     }

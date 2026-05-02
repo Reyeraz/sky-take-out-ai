@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Phone, Shield, LogOut, ChevronRight } from 'lucide-react';
+import { User, Phone, Shield, LogOut, ChevronRight, MapPin } from 'lucide-react';
+import api from '../api/client';
+import type { AddressBookItem } from '../types';
 
 interface ProfileInfo {
   id: number;
@@ -11,6 +13,7 @@ interface ProfileInfo {
 export default function UserProfile() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileInfo | null>(null);
+  const [defaultAddress, setDefaultAddress] = useState<AddressBookItem | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('sky_user');
@@ -19,7 +22,17 @@ export default function UserProfile() {
         setProfile(JSON.parse(stored));
       } catch {}
     }
+    fetchDefaultAddress();
   }, []);
+
+  const fetchDefaultAddress = async () => {
+    try {
+      const data = await api.get('/user/addressBook/default') as unknown as AddressBookItem;
+      setDefaultAddress(data);
+    } catch {
+      // no default address set
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('sky_token');
@@ -70,6 +83,27 @@ export default function UserProfile() {
             </div>
           </div>
         ))}
+
+        {/* Address Book Entry */}
+        <div
+          onClick={() => navigate('/user/address')}
+          className="flex items-center justify-between px-4 py-4 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <MapPin size={18} className="text-gray-400" />
+            <span className="text-sm font-medium">收货地址</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {defaultAddress ? (
+              <span className="text-sm text-gray-500 truncate max-w-36">
+                {defaultAddress.consignee} {defaultAddress.phone}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-300">未设置</span>
+            )}
+            <ChevronRight size={14} className="text-gray-300" />
+          </div>
+        </div>
       </div>
 
       {/* Logout */}

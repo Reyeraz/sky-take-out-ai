@@ -1,5 +1,6 @@
 package com.sky.controller.user;
 
+import com.alibaba.fastjson2.JSON;
 import com.sky.constant.StatusConstant;
 import com.sky.entity.Dish;
 import com.sky.result.Result;
@@ -23,7 +24,7 @@ public class DishController {
     @Autowired
     private DishService dishService;
     @Autowired
-    private RedisTemplate redisTemplate;
+    private RedisTemplate<String, Object> redisTemplate;
 
     /**
      * 根据分类id查询菜品
@@ -35,14 +36,17 @@ public class DishController {
     @Operation(summary = "根据分类id查询菜品")
     public Result<List<DishVO>> list(Long categoryId) {
 
-        //构造redis中的key，规则：dish_分类id
         String key = "dish_" + categoryId;
 
         //查询redis中是否存在菜品数据
         try {
-            List<DishVO> list = (List<DishVO>) redisTemplate.opsForValue().get(key);
-            if(list != null && list.size() > 0){
-                return Result.success(list);
+            Object cached = redisTemplate.opsForValue().get(key);
+            if (cached != null) {
+                List<DishVO> list = JSON.parseArray(cached.toString(), DishVO.class);
+                if (list != null && !list.isEmpty()) {
+                    log.info("Redis缓存命中 key={}", key);
+                    return Result.success(list);
+                }
             }
         } catch (Exception e) {
             log.warn("Redis查询缓存失败，从数据库查询: {}", e.getMessage());
@@ -50,12 +54,13 @@ public class DishController {
 
         Dish dish = new Dish();
         dish.setCategoryId(categoryId);
-        dish.setStatus(StatusConstant.ENABLE);//查询起售中的菜品
+        dish.setStatus(StatusConstant.ENABLE);
 
         //如果不存在，查询数据库，将查询到的数据放入redis中
         List<DishVO> list = dishService.listWithFlavor(dish);
         try {
-            redisTemplate.opsForValue().set(key, list);
+            redisTemplate.opsForValue().set(key, JSON.toJSONString(list));
+            log.info("Redis缓存写入成功 key={}, 菜品数={}", key, list.size());
         } catch (Exception e) {
             log.warn("Redis写入缓存失败: {}", e.getMessage());
         }

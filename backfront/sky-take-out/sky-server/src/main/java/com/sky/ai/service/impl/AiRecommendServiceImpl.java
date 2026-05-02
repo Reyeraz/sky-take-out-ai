@@ -55,29 +55,80 @@ public class AiRecommendServiceImpl implements AiService {
 
     @Override
     public List<AiRecommendVO> recommend(Long userId) {
+        String cacheKey = "ai:recommend:user_" + userId;
+        log.info("[AI推荐] 开始为 userId={} 生成推荐", userId);
+
+        if (redisTemplate != null) {
+            try {
+                Object cached = redisTemplate.opsForValue().get(cacheKey);
+                if (cached != null) {
+                    List<AiRecommendVO> cachedList = JSON.parseArray(cached.toString(), AiRecommendVO.class);
+                    if (cachedList != null && !cachedList.isEmpty()) {
+                        log.info("[AI推荐] Redis缓存命中 userId={}, 推荐数={}", userId, cachedList.size());
+                        return cachedList;
+                    }
+                }
+                log.info("[AI推荐] Redis缓存未命中 userId={}", userId);
+            } catch (Exception e) {
+                log.warn("[AI推荐] Redis读取缓存失败 userId={}: {}", userId, e.getMessage());
+            }
+        }
+
+        long start = System.currentTimeMillis();
         String userProfile = buildUserProfile(userId);
+        log.info("[AI推荐] 用户画像构建完成 userId={}, profile={}", userId, userProfile);
+
         String dishesJson = getAvailableDishesJson();
+        log.info("[AI推荐] 可用菜品数据获取完成，准备调用AI...");
 
         try {
             String response = chatClient.prompt()
                     .system("你是一个专业的外卖点餐推荐助手。你必须只返回纯JSON格式的数据，不要包含任何解释或markdown标记。")
                     .user("""
                             用户偏好：%s
-                            
+
                             今日可售菜品（JSON格式）：%s
-                            
+
                             请根据用户偏好和可售菜品，推荐5道菜品。返回格式：
                             {"recommendations":[{"dishId":数字,"reason":"推荐理由"}]}
-                            
+
                             只返回JSON，不要其他内容。
                             """.formatted(userProfile, dishesJson))
                     .call()
                     .content();
 
-            return parseRecommendResponse(response, dishesJson);
+            long elapsed = System.currentTimeMillis() - start;
+            log.info("[AI推荐] AI调用完成 userId={}, 耗时={}ms", userId, elapsed);
+
+            List<AiRecommendVO> result = parseRecommendResponse(response, dishesJson);
+            log.info("[AI推荐] 推荐解析完成 userId={}, 推荐数={}, 推荐菜品={}",
+                    userId, result.size(),
+                    result.stream().map(AiRecommendVO::getDishName).collect(Collectors.joining(",")));
+
+            if (redisTemplate != null && result != null && !result.isEmpty()) {
+                try {
+                    redisTemplate.opsForValue().set(cacheKey, JSON.toJSONString(result), 3600, TimeUnit.SECONDS);
+                    log.info("[AI推荐] Redis缓存写入成功 userId={}, TTL=3600s", userId);
+                } catch (Exception e) {
+                    log.warn("[AI推荐] Redis写入缓存失败 userId={}: {}", userId, e.getMessage());
+                }
+            }
+
+            return result;
         } catch (Exception e) {
-            log.warn("AI推荐调用失败，降级为规则推荐: {}", e.getMessage());
-            return fallbackRecommend(userId);
+            long elapsed = System.currentTimeMillis() - start;
+            log.warn("[AI推荐] AI调用失败 userId={}, 耗时={}ms, 降级为规则推荐: {}", userId, elapsed, e.getMessage());
+            List<AiRecommendVO> fallback = fallbackRecommend(userId);
+            log.info("[AI推荐] 降级推荐完成 userId={}, 推荐数={}", userId, fallback.size());
+            if (redisTemplate != null && fallback != null && !fallback.isEmpty()) {
+                try {
+                    redisTemplate.opsForValue().set(cacheKey, JSON.toJSONString(fallback), 600, TimeUnit.SECONDS);
+                    log.info("[AI推荐] 降级推荐缓存写入成功 userId={}, TTL=600s", userId);
+                } catch (Exception ex) {
+                    log.warn("[AI推荐] Redis写入降级缓存失败 userId={}: {}", ex.getMessage());
+                }
+            }
+            return fallback;
         }
     }
 
@@ -85,20 +136,31 @@ public class AiRecommendServiceImpl implements AiService {
     public AiDailyVO getDailyRecommend() {
         String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
         String cacheKey = "ai:daily:" + today;
+        log.info("[每日推荐] 开始生成每日推荐 date={}", today);
 
         if (redisTemplate != null) {
             try {
                 Object cached = redisTemplate.opsForValue().get(cacheKey);
                 if (cached != null) {
-                    return JSON.parseObject(cached.toString(), AiDailyVO.class);
+                    AiDailyVO cachedVO = JSON.parseObject(cached.toString(), AiDailyVO.class);
+                    if (cachedVO != null) {
+                        log.info("[每日推荐] Redis缓存命中 date={}, slogan={}, 推荐数={}",
+                                today, cachedVO.getSlogan(),
+                                cachedVO.getRecommendations() != null ? cachedVO.getRecommendations().size() : 0);
+                        return cachedVO;
+                    }
                 }
+                log.info("[每日推荐] Redis缓存未命中 date={}", today);
             } catch (Exception e) {
-                log.warn("Redis读取每日推荐缓存失败: {}", e.getMessage());
+                log.warn("[每日推荐] Redis读取缓存失败 date={}: {}", today, e.getMessage());
             }
         }
 
+        long start = System.currentTimeMillis();
         String dishesJson = getAvailableDishesJson();
         String hotDishesJson = getHotDishesJson();
+        log.info("[每日推荐] 数据准备完成，菜品数据长度={}, 热销数据长度={}，开始调用AI...",
+                dishesJson.length(), hotDishesJson.length());
 
         try {
             String escapedDishesJson = dishesJson.replace("{", "\\{").replace("}", "\\}");
@@ -107,33 +169,43 @@ public class AiRecommendServiceImpl implements AiService {
                     .system("你是一个专业的外卖推荐助手。你必须只返回纯JSON格式的数据，不要包含任何解释或markdown标记。")
                     .user("""
                             今日可售菜品：%s
-                            
+
                             近期热销菜品：%s
-                            
+
                             请为今天推荐一个主题标语和6道推荐菜品。返回格式：
                             {"slogan":"今日主题标语","recommendations":[{"dishId":数字,"reason":"推荐理由"}]}
-                            
+
                             只返回JSON，不要其他内容。
                             """.formatted(escapedDishesJson, escapedHotJson))
                     .call()
                     .content();
 
+            long elapsed = System.currentTimeMillis() - start;
+            log.info("[每日推荐] AI调用完成 date={}, 耗时={}ms", today, elapsed);
+
             AiDailyVO dailyVO = parseDailyResponse(response, today);
+            log.info("[每日推荐] 推荐解析完成 date={}, slogan={}, 推荐数={}",
+                    today, dailyVO.getSlogan(),
+                    dailyVO.getRecommendations() != null ? dailyVO.getRecommendations().size() : 0);
 
             if (redisTemplate != null && dailyVO != null) {
                 try {
                     long secondsUntilMidnight = LocalDateTime.now().until(
                             LocalDate.now().plusDays(1).atStartOfDay(), java.time.temporal.ChronoUnit.SECONDS);
                     redisTemplate.opsForValue().set(cacheKey, JSON.toJSONString(dailyVO), secondsUntilMidnight, TimeUnit.SECONDS);
+                    log.info("[每日推荐] Redis缓存写入成功 date={}, TTL={}s(至午夜)", today, secondsUntilMidnight);
                 } catch (Exception e) {
-                    log.warn("Redis写入每日推荐缓存失败: {}", e.getMessage());
+                    log.warn("[每日推荐] Redis写入缓存失败 date={}: {}", today, e.getMessage());
                 }
             }
 
             return dailyVO;
         } catch (Exception e) {
-            log.warn("AI每日推荐调用失败: {}", e.getMessage());
-            return fallbackDailyRecommend(today);
+            long elapsed = System.currentTimeMillis() - start;
+            log.warn("[每日推荐] AI调用失败 date={}, 耗时={}ms, 降级处理: {}", today, elapsed, e.getMessage());
+            AiDailyVO fallback = fallbackDailyRecommend(today);
+            log.info("[每日推荐] 降级推荐完成 date={}, slogan={}", today, fallback.getSlogan());
+            return fallback;
         }
     }
 

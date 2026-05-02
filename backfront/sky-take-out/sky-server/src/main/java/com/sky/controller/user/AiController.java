@@ -62,6 +62,7 @@ public class AiController {
     @Operation(summary = "AI点餐助手流式对话")
     public SseEmitter chatStream(@RequestBody AiChatDTO aiChatDTO) {
         Long userId = BaseContext.getCurrentId();
+
         log.info("AI流式对话, userId: {}, message: {}", userId, aiChatDTO.getMessage());
 
         SseEmitter emitter = new SseEmitter(300000L);
@@ -116,7 +117,7 @@ public class AiController {
             try {
                 emitter.send(SseEmitter.event()
                         .name("error")
-                        .data("抱歉，AI助手暂时不可用，请稍后再试。"));
+                        .data("抱歉，AI助手暂时不可用，请稍后再试。"), MediaType.TEXT_PLAIN);
                 emitter.complete();
             } catch (Exception ex) {
                 emitter.completeWithError(ex);

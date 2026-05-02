@@ -72,7 +72,8 @@ public class WorkspaceServiceImpl implements WorkspaceService {
             unitPrice = turnover / validOrderCount;
         }
 
-        //新增用户数
+        //新增用户数（移除 status 键，避免污染用户查询）
+        map.remove("status");
         Integer newUsers = userMapper.countByMap(map);
 
         return BusinessDataVO.builder()

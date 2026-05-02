@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout';
 import UserLayout from './layouts/UserLayout';
-import UserAiChat from './pages/UserAiChat';
+// import UserAiChat from './pages/UserAiChat'; // 暂时关闭AI助手
 import UserHome from './pages/UserHome';
 import UserBrowse from './pages/UserBrowse';
 import UserCart from './pages/UserCart';
@@ -17,7 +17,7 @@ import AdminDish from './pages/admin/AdminDish';
 import AdminSetmeal from './pages/admin/AdminSetmeal';
 import AdminOrder from './pages/admin/AdminOrder';
 import AdminReport from './pages/admin/AdminReport';
-import AdminAi from './pages/admin/AdminAi';
+// import AdminAi from './pages/admin/AdminAi'; // 暂时关闭AI助手
 import AdminShop from './pages/admin/AdminShop';
 import LoginPage from './pages/LoginPage';
 
@@ -48,7 +48,7 @@ export default function App() {
             <Route path="setmeal" element={<AdminSetmeal />} />
             <Route path="order" element={<AdminOrder />} />
             <Route path="report" element={<AdminReport />} />
-            <Route path="ai" element={<AdminAi />} />
+{/* <Route path="ai" element={<AdminAi />} /> */}
             <Route path="shop" element={<AdminShop />} />
           </Route>
         </Route>
@@ -58,7 +58,7 @@ export default function App() {
           <Route path="/user" element={<UserLayout />}>
             <Route index element={<UserHome />} />
             <Route path="browse" element={<UserBrowse />} />
-            <Route path="ai" element={<UserAiChat />} />
+{/* <Route path="ai" element={<UserAiChat />} /> */}
             <Route path="cart" element={<UserCart />} />
             <Route path="orders" element={<UserOrders />} />
             <Route path="order/:id" element={<UserOrderDetail />} />

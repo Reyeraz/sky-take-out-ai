@@ -34,6 +34,9 @@ public class CommonController {
 
         try {
             String originalFilename = file.getOriginalFilename();
+            if (originalFilename == null || !originalFilename.contains(".")) {
+                return Result.error("文件名无效");
+            }
             String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
             String objectName = UUID.randomUUID().toString() + extension;
 

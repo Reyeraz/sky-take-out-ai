@@ -78,7 +78,7 @@ export default function AdminDish() {
           <div><label className="text-xs text-gray-500">分类</label><select value={form.categoryId || ''} onChange={e => setForm({...form, categoryId: +e.target.value})} className="border border-gray-200 rounded-lg py-2 px-3 text-sm mt-1 w-28"><option value="">选择</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label className="text-xs text-gray-500">价格</label><input type="number" step="0.01" value={form.price || ''} onChange={e => setForm({...form, price: +e.target.value})} className="border border-gray-200 rounded-lg py-2 px-3 text-sm mt-1 w-24" /></div>
           <div><label className="text-xs text-gray-500">描述</label><input value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="border border-gray-200 rounded-lg py-2 px-3 text-sm mt-1 w-48" /></div>
-          <div><label className="text-xs text-gray-500">图片</label><div className="flex items-center gap-2 mt-1"><input value={form.image} onChange={e => setForm({...form, image: e.target.value})} placeholder="URL或上传" className="border border-gray-200 rounded-lg py-2 px-3 text-sm w-40" /><label className="bg-gray-100 hover:bg-gray-200 rounded-lg p-2 cursor-pointer"><Upload size={14} /><input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" /></label>{uploading && <span className="text-xs text-gray-400">上传中...</span>}</div></div>
+          <div><label className="text-xs text-gray-500">图片</label><div className="flex items-center gap-2 mt-1"><input value={form.image} onChange={e => setForm({...form, image: e.target.value})} placeholder="外链URL或本地上传" className="border border-gray-200 rounded-lg py-2 px-3 text-sm w-40" /><label className="bg-gray-100 hover:bg-gray-200 rounded-lg p-2 cursor-pointer"><Upload size={14} /><input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" /></label>{form.image && <img src={form.image} alt="" className="w-8 h-8 rounded object-cover bg-gray-100" />}{uploading && <span className="text-xs text-gray-400">上传中...</span>}</div></div>
           <button onClick={handleSave} className="bg-[#ffc200] text-[#343744] px-4 py-2 rounded-lg font-bold text-sm">{editing ? '更新' : '添加'}</button>
           {editing && <button onClick={() => { setEditing(null); setForm({ name: '', categoryId: 0, price: 0, description: '', image: '' }); }} className="bg-gray-200 text-gray-600 px-4 py-2 rounded-lg font-bold text-sm">取消</button>}
         </div>
@@ -86,13 +86,20 @@ export default function AdminDish() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                {['ID', '名称', '分类', '价格', '状态', '操作'].map(h => <th key={h} className="text-left px-6 py-3 text-xs text-gray-500 font-bold uppercase">{h}</th>)}
+                {['ID', '图片', '名称', '分类', '价格', '状态', '操作'].map(h => <th key={h} className="text-left px-6 py-3 text-xs text-gray-500 font-bold uppercase">{h}</th>)}
               </tr>
             </thead>
             <tbody>
               {data.map(row => (
                 <tr key={row.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                   <td className="px-6 py-4">{row.id}</td>
+                  <td className="px-6 py-4">
+                    {row.image ? (
+                      <img src={row.image} alt="" className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-300 text-[10px]">无</div>
+                    )}
+                  </td>
                   <td className="px-6 py-4 font-medium">{row.name}</td>
                   <td className="px-6 py-4">{row.categoryName || row.categoryId}</td>
                   <td className="px-6 py-4">¥{row.price != null ? Number(row.price).toFixed(2) : '--'}</td>

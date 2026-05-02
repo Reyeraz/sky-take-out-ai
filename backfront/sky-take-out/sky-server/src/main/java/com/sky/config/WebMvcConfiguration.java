@@ -69,6 +69,8 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
         log.info("扩展消息转换器...");
         MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter();
         converter.setObjectMapper(new JacksonObjectMapper());
-        converters.add(0, converter);
+        // 放在 StringHttpMessageConverter 之后（index 2），
+        // 避免 SSE 的 String 数据被 Jackson 二次 JSON 编码加引号
+        converters.add(2, converter);
     }
 }

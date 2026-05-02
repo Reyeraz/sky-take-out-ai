@@ -22,6 +22,7 @@ export default function UserAddressBook() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<AddressBookItem>({ ...defaultForm });
   const [defaultAddress, setDefaultAddress] = useState<AddressBookItem | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   useEffect(() => { fetchAddresses(); fetchDefault(); }, []);
 
@@ -75,12 +76,16 @@ export default function UserAddressBook() {
     setShowForm(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async () => {
+    if (!deleteId) return;
     try {
-      await api.delete('/user/addressBook', { params: { id } });
+      await api.delete('/user/addressBook', { params: { id: deleteId } });
+      setDeleteId(null);
       fetchAddresses();
     } catch { console.warn('Delete failed'); }
   };
+
+  const confirmDelete = (id: number) => { setDeleteId(id); };
 
   const handleSetDefault = async (addr: AddressBookItem) => {
     try {
@@ -170,7 +175,7 @@ export default function UserAddressBook() {
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => handleEdit(addr)} className="p-1 text-gray-400 hover:text-[#ffc200]"><Edit3 size={14} /></button>
-                  <button onClick={() => addr.id && handleDelete(addr.id)} className="p-1 text-gray-400 hover:text-red-400"><Trash2 size={14} /></button>
+                  <button onClick={() => addr.id && confirmDelete(addr.id)} className="p-1 text-gray-400 hover:text-red-400"><Trash2 size={14} /></button>
                 </div>
               </div>
               <p className="text-xs text-gray-500">
@@ -183,6 +188,22 @@ export default function UserAddressBook() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Delete Confirm Dialog */}
+      {deleteId !== null && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setDeleteId(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold mb-2">确认删除地址？</h2>
+            <p className="text-sm text-gray-400 mb-6">删除后无法恢复，确定要删除该地址吗？</p>
+            <div className="flex gap-2">
+              <button onClick={handleDelete}
+                className="flex-1 bg-red-500 text-white font-bold py-3 rounded-full text-sm">确认删除</button>
+              <button onClick={() => setDeleteId(null)}
+                className="flex-1 bg-gray-100 text-gray-500 font-bold py-3 rounded-full text-sm">取消</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
