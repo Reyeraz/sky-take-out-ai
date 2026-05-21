@@ -1,0 +1,22 @@
+sky:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    host: ${WEB_CONNENT}
+    port: 54237
+    database: sky_take_out
+    username: root
+    password: 4*hBcy3*Ao0N
+  redis:
+    host: ${WEB_CONNENT}
+    port: 54224
+    password: 4*hBcy3*Ao0N
+    database: 0
+
+spring:
+  ai:
+    dashscope:
+      api-key: ${BAILIAN_API_KEY}
+      chat:
+        options:
+          model: qwen-plus
+          temperature: 0.7
