@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Context
+
+This project is a **git submodule** nested inside an Obsidian vault at `Projects/苍穹外卖 with AI`. The parent vault has its own CLAUDE.md with vault-wide rules (file ops, git workflow, Obsidian syntax). When working in this submodule directory, the parent CLAUDE.md is not loaded — this file is the sole source of project guidance.
+
 ## Build & Run Commands
 
 ```bash
